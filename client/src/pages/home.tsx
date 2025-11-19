@@ -33,7 +33,7 @@ export default function Home() {
     queryKey: ["/api/stats"],
   });
 
-  // Get today's medications with their status
+  // Get today's medications with their status (all doses for today)
   const getTodayMedications = () => {
     const today = new Date();
     const currentHour = today.getHours();
@@ -48,27 +48,22 @@ export default function Home() {
 
     medications.forEach(med => {
       med.times.forEach(time => {
-        const [hour, minute] = time.split(':').map(Number);
-        const scheduleTimeInMinutes = hour * 60 + minute;
+        // Show all medications scheduled for today
+        const log = todayLogs.find(
+          l => l.medicationId === med.id && l.scheduledTime === time
+        );
         
-        if (scheduleTimeInMinutes <= currentTimeInMinutes + 60) {
-          const log = todayLogs.find(
-            l => l.medicationId === med.id && l.scheduledTime === time
-          );
-          
-          let status: "taken" | "missed" | "pending" = "pending";
-          if (log) {
-            status = log.status as any;
-          } else if (scheduleTimeInMinutes < currentTimeInMinutes - 30) {
-            status = "missed";
-          }
-
-          todayMeds.push({
-            medication: med,
-            time,
-            status,
-          });
+        // Status is derived from logs only - backend determines missed status
+        let status: "taken" | "missed" | "pending" = "pending";
+        if (log) {
+          status = log.status as any;
         }
+
+        todayMeds.push({
+          medication: med,
+          time,
+          status,
+        });
       });
     });
 
@@ -357,38 +352,130 @@ export default function Home() {
             />
           </div>
 
+          {/* Today's Schedule Timeline */}
+          <Card data-testid="card-schedule-timeline">
+            <CardHeader>
+              <CardTitle className="text-[28px]">Today's Schedule</CardTitle>
+              <CardDescription className="text-[18px]">
+                Visual timeline of your medication schedule
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {todayMeds.length === 0 ? (
+                <div className="space-y-6 py-4">
+                  <p className="text-[18px] text-muted-foreground text-center">
+                    {medications.length === 0 ? "Example schedule shown below" : "No medications scheduled for display"}
+                  </p>
+                  {/* Mock Schedule */}
+                  {[
+                    { time: "08:00", name: "Morning Vitamins", dosage: "1 tablet", status: "pending" },
+                    { time: "12:00", name: "Lunch Medication", dosage: "2 tablets", status: "pending" },
+                    { time: "18:00", name: "Evening Dose", dosage: "1 tablet", status: "pending" },
+                    { time: "22:00", name: "Bedtime Pills", dosage: "1 capsule", status: "pending" },
+                  ].map((item, index) => (
+                    <div 
+                      key={index}
+                      className="flex items-center gap-4 p-4 rounded-lg bg-muted/30"
+                      data-testid={`mock-schedule-${index}`}
+                    >
+                      <div className="flex-shrink-0 w-24 text-center">
+                        <div className="text-[24px] font-bold">{item.time}</div>
+                        <div className="w-3 h-3 rounded-full bg-primary mx-auto mt-2" />
+                      </div>
+                      <Separator orientation="vertical" className="h-16" />
+                      <div className="flex-1">
+                        <div className="text-[22px] font-semibold">{item.name}</div>
+                        <div className="text-[18px] text-muted-foreground">{item.dosage}</div>
+                      </div>
+                      <Clock className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                  ))}
+                  {medications.length === 0 && (
+                    <Button
+                      variant="default"
+                      className="w-full min-h-[64px] text-[22px]"
+                      onClick={() => setLocation("/scan")}
+                      data-testid="button-add-first-medication"
+                    >
+                      <Camera className="w-6 h-6 mr-2" />
+                      Add Your First Medication
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Real Schedule */}
+                  {todayMeds.slice(0, 5).map((item, index) => (
+                    <div 
+                      key={`${item.medication.id}-${item.time}`}
+                      className="flex items-center gap-4 p-4 rounded-lg bg-muted/30"
+                      data-testid={`schedule-item-${index}`}
+                    >
+                      <div className="flex-shrink-0 w-24 text-center">
+                        <div className="text-[24px] font-bold">{item.time}</div>
+                        <div className={`w-3 h-3 rounded-full mx-auto mt-2 ${
+                          item.status === "taken" 
+                            ? "bg-green-600 dark:bg-green-400" 
+                            : item.status === "missed" 
+                            ? "bg-red-600 dark:bg-red-400" 
+                            : "bg-primary"
+                        }`} />
+                      </div>
+                      <Separator orientation="vertical" className="h-16" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[22px] font-semibold truncate">{item.medication.name}</div>
+                        <div className="text-[18px] text-muted-foreground">{item.medication.dosage}</div>
+                      </div>
+                      {item.status === "taken" && (
+                        <CheckCircle2 className="w-7 h-7 text-green-600 dark:text-green-400 flex-shrink-0" />
+                      )}
+                      {item.status === "missed" && (
+                        <AlertCircle className="w-7 h-7 text-red-600 dark:text-red-400 flex-shrink-0" />
+                      )}
+                      {item.status === "pending" && (
+                        <Clock className="w-7 h-7 text-primary flex-shrink-0" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Upcoming Medications */}
-          <div className="space-y-4">
-            <h2 className="text-[24px] font-semibold">Upcoming Today</h2>
-            {todayMeds.length === 0 ? (
-              <p className="text-[20px] text-muted-foreground text-center py-8">
-                No medications scheduled
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {todayMeds.slice(0, 3).map((item) => (
-                  <MedicationCard
-                    key={`${item.medication.id}-${item.time}`}
-                    name={item.medication.name}
-                    dosage={item.medication.dosage}
-                    time={item.time}
-                    imageUrl={item.medication.imageUrl}
-                    status={item.status}
-                    onMarkTaken={item.status === "pending" ? () => setLocation("/scan") : undefined}
-                  />
-                ))}
-              </div>
-            )}
-            
-            <Button
-              variant="outline"
-              className="w-full min-h-[56px] text-[22px]"
-              onClick={() => setLocation("/schedule")}
-              data-testid="button-view-full-schedule"
-            >
-              View Full Schedule
-            </Button>
-          </div>
+          {medications.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-[24px] font-semibold">Next Medications</h2>
+              {todayMeds.length === 0 ? (
+                <p className="text-[20px] text-muted-foreground text-center py-8">
+                  No medications pending
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {todayMeds.slice(0, 3).map((item) => (
+                    <MedicationCard
+                      key={`${item.medication.id}-${item.time}`}
+                      name={item.medication.name}
+                      dosage={item.medication.dosage}
+                      time={item.time}
+                      imageUrl={item.medication.imageUrl}
+                      status={item.status}
+                      onMarkTaken={item.status === "pending" ? () => setLocation("/scan") : undefined}
+                    />
+                  ))}
+                </div>
+              )}
+              
+              <Button
+                variant="outline"
+                className="w-full min-h-[56px] text-[22px]"
+                onClick={() => setLocation("/schedule")}
+                data-testid="button-view-full-schedule"
+              >
+                View Full Schedule
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
