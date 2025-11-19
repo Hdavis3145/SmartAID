@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import BottomNav from "@/components/BottomNav";
 import { NotificationSettings } from "@/components/NotificationSettings";
+import { useTheme } from "@/components/ThemeProvider";
 import { Moon, Volume2, Users, HelpCircle } from "lucide-react";
 
 export default function Settings() {
-  const [notifications, setNotifications] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   const settingItems = [
     {
@@ -25,8 +25,8 @@ export default function Settings() {
       icon: Moon,
       label: "Dark Mode",
       description: "Use dark color theme",
-      value: darkMode,
-      onChange: setDarkMode,
+      value: theme === "dark",
+      onChange: toggleTheme,
       testId: "switch-dark-mode",
     },
   ];
