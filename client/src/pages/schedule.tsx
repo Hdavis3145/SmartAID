@@ -1,20 +1,70 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import MedicationCard from "@/components/MedicationCard";
 import BottomNav from "@/components/BottomNav";
-import { mockMedications } from "@/lib/mockData";
+import { useLocation } from "wouter";
+import type { Medication, MedicationLog } from "@shared/schema";
 
 export default function Schedule() {
-  const [medications] = useState(mockMedications);
   const [activeTab, setActiveTab] = useState("today");
+  const [, setLocation] = useLocation();
 
-  // Mock medication status - todo: remove mock functionality
-  const getMockStatus = (index: number) => {
-    if (activeTab === "today") {
-      return index < 2 ? "taken" : "pending";
+  const { data: medications = [], isLoading } = useQuery<Medication[]>({
+    queryKey: ["/api/medications"],
+  });
+
+  const { data: todayLogs = [] } = useQuery<MedicationLog[]>({
+    queryKey: ["/api/logs/today"],
+  });
+
+  const getMedicationStatus = (medId: string, time: string): "taken" | "missed" | "pending" => {
+    if (activeTab === "tomorrow") return "pending";
+
+    const log = todayLogs.find(l => l.medicationId === medId && l.scheduledTime === time);
+    if (log) return log.status as any;
+
+    const now = new Date();
+    const [hour, minute] = time.split(':').map(Number);
+    const scheduleTime = new Date();
+    scheduleTime.setHours(hour, minute, 0, 0);
+
+    if (scheduleTime.getTime() < now.getTime() - 30 * 60 * 1000) {
+      return "missed";
     }
+
     return "pending";
   };
+
+  const getAllScheduledMeds = () => {
+    const result: Array<{
+      medication: Medication;
+      time: string;
+      status: "taken" | "missed" | "pending";
+    }> = [];
+
+    medications.forEach(med => {
+      med.times.forEach(time => {
+        result.push({
+          medication: med,
+          time,
+          status: getMedicationStatus(med.id, time),
+        });
+      });
+    });
+
+    return result.sort((a, b) => a.time.localeCompare(b.time));
+  };
+
+  const scheduledMeds = getAllScheduledMeds();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center pb-24">
+        <p className="text-[24px] text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -42,27 +92,33 @@ export default function Schedule() {
             </TabsList>
 
             <TabsContent value="today" className="mt-6 space-y-3">
-              {medications.map((med, idx) => (
-                <MedicationCard
-                  key={med.id}
-                  name={med.name}
-                  dosage={med.dosage}
-                  time={med.times[0]}
-                  imageUrl={med.imageUrl}
-                  status={getMockStatus(idx) as any}
-                  onMarkTaken={() => console.log(`Mark ${med.name} as taken`)}
-                />
-              ))}
+              {scheduledMeds.length === 0 ? (
+                <p className="text-[20px] text-muted-foreground text-center py-8">
+                  No medications scheduled
+                </p>
+              ) : (
+                scheduledMeds.map((item, idx) => (
+                  <MedicationCard
+                    key={`${item.medication.id}-${item.time}-${idx}`}
+                    name={item.medication.name}
+                    dosage={item.medication.dosage}
+                    time={item.time}
+                    imageUrl={item.medication.imageUrl}
+                    status={item.status}
+                    onMarkTaken={item.status === "pending" ? () => setLocation("/scan") : undefined}
+                  />
+                ))
+              )}
             </TabsContent>
 
             <TabsContent value="tomorrow" className="mt-6 space-y-3">
-              {medications.map((med) => (
+              {scheduledMeds.map((item, idx) => (
                 <MedicationCard
-                  key={med.id}
-                  name={med.name}
-                  dosage={med.dosage}
-                  time={med.times[0]}
-                  imageUrl={med.imageUrl}
+                  key={`${item.medication.id}-${item.time}-tomorrow-${idx}`}
+                  name={item.medication.name}
+                  dosage={item.medication.dosage}
+                  time={item.time}
+                  imageUrl={item.medication.imageUrl}
                   status="pending"
                 />
               ))}

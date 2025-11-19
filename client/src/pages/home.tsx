@@ -1,20 +1,84 @@
-import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Camera, CheckCircle2, Clock, TrendingUp } from "lucide-react";
 import StatCard from "@/components/StatCard";
 import MedicationCard from "@/components/MedicationCard";
 import BottomNav from "@/components/BottomNav";
-import { mockMedications } from "@/lib/mockData";
 import { useLocation } from "wouter";
+import type { Medication, MedicationLog } from "@shared/schema";
 
 export default function Home() {
   const [, setLocation] = useLocation();
-  const [medications] = useState(mockMedications);
   
-  // Mock stats - todo: remove mock functionality
-  const todayMeds = medications.filter(m => m.times.includes("08:00") || m.times.includes("09:00"));
-  const takenCount = 2;
-  const totalCount = todayMeds.length;
+  const { data: medications = [], isLoading: medsLoading } = useQuery<Medication[]>({
+    queryKey: ["/api/medications"],
+  });
+
+  const { data: todayLogs = [] } = useQuery<MedicationLog[]>({
+    queryKey: ["/api/logs/today"],
+  });
+
+  const { data: stats } = useQuery<{
+    totalScheduledToday: number;
+    takenCount: number;
+    missedCount: number;
+    pendingCount: number;
+    adherenceRate: number;
+  }>({
+    queryKey: ["/api/stats"],
+  });
+
+  // Get today's medications with their status
+  const getTodayMedications = () => {
+    const today = new Date();
+    const currentHour = today.getHours();
+    const currentMinute = today.getMinutes();
+    const currentTimeInMinutes = currentHour * 60 + currentMinute;
+
+    const todayMeds: Array<{
+      medication: Medication;
+      time: string;
+      status: "taken" | "missed" | "pending";
+    }> = [];
+
+    medications.forEach(med => {
+      med.times.forEach(time => {
+        const [hour, minute] = time.split(':').map(Number);
+        const scheduleTimeInMinutes = hour * 60 + minute;
+        
+        if (scheduleTimeInMinutes <= currentTimeInMinutes + 60) {
+          const log = todayLogs.find(
+            l => l.medicationId === med.id && l.scheduledTime === time
+          );
+          
+          let status: "taken" | "missed" | "pending" = "pending";
+          if (log) {
+            status = log.status as any;
+          } else if (scheduleTimeInMinutes < currentTimeInMinutes - 30) {
+            status = "missed";
+          }
+
+          todayMeds.push({
+            medication: med,
+            time,
+            status,
+          });
+        }
+      });
+    });
+
+    return todayMeds.sort((a, b) => a.time.localeCompare(b.time));
+  };
+
+  const todayMeds = getTodayMedications();
+
+  if (medsLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-[24px] text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -45,19 +109,19 @@ export default function Home() {
             <h2 className="text-[24px] font-semibold">Today's Progress</h2>
             <StatCard
               label="Medications Taken"
-              value={`${takenCount} of ${totalCount}`}
+              value={`${stats?.takenCount || 0} of ${stats?.totalScheduledToday || 0}`}
               icon={CheckCircle2}
               variant="success"
             />
             <StatCard
               label="Pending Doses"
-              value={totalCount - takenCount}
+              value={stats?.pendingCount || 0}
               icon={Clock}
               variant="warning"
             />
             <StatCard
               label="Weekly Adherence"
-              value="95%"
+              value={`${stats?.adherenceRate || 100}%`}
               icon={TrendingUp}
               variant="success"
             />
@@ -66,19 +130,25 @@ export default function Home() {
           {/* Upcoming Medications */}
           <div className="space-y-4">
             <h2 className="text-[24px] font-semibold">Upcoming Today</h2>
-            <div className="space-y-3">
-              {todayMeds.slice(0, 3).map((med, idx) => (
-                <MedicationCard
-                  key={med.id}
-                  name={med.name}
-                  dosage={med.dosage}
-                  time={med.times[0]}
-                  imageUrl={med.imageUrl}
-                  status={idx < takenCount ? "taken" : "pending"}
-                  onMarkTaken={() => console.log(`Mark ${med.name} as taken`)}
-                />
-              ))}
-            </div>
+            {todayMeds.length === 0 ? (
+              <p className="text-[20px] text-muted-foreground text-center py-8">
+                No medications scheduled
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {todayMeds.slice(0, 3).map((item) => (
+                  <MedicationCard
+                    key={`${item.medication.id}-${item.time}`}
+                    name={item.medication.name}
+                    dosage={item.medication.dosage}
+                    time={item.time}
+                    imageUrl={item.medication.imageUrl}
+                    status={item.status}
+                    onMarkTaken={item.status === "pending" ? () => setLocation("/scan") : undefined}
+                  />
+                ))}
+              </div>
+            )}
             
             <Button
               variant="outline"
