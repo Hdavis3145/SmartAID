@@ -9,6 +9,7 @@ import Schedule from "@/pages/schedule";
 import Scan from "@/pages/scan";
 import History from "@/pages/history";
 import Settings from "@/pages/settings";
+import Caregivers from "@/pages/caregivers";
 
 function Router() {
   return (
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/scan" component={Scan} />
       <Route path="/history" component={History} />
       <Route path="/settings" component={Settings} />
+      <Route path="/caregivers" component={Caregivers} />
     </Switch>
   );
 }

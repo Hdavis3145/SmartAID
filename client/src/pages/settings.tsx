@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ export default function Settings() {
       label: "Manage Caregivers",
       description: "Add or remove caregiver contacts",
       testId: "button-caregivers",
-      onClick: () => console.log("Manage Caregivers"),
+      href: "/caregivers",
     },
     {
       icon: HelpCircle,
@@ -100,25 +101,43 @@ export default function Settings() {
           <div className="space-y-3">
             {actionItems.map((item) => {
               const Icon = item.icon;
+              const content = (
+                <div className="flex items-center gap-4 text-left w-full">
+                  <div className="text-primary">
+                    <Icon className="w-10 h-10" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[20px] font-semibold">{item.label}</p>
+                    <p className="text-[18px] text-muted-foreground font-normal mt-1">
+                      {item.description}
+                    </p>
+                  </div>
+                </div>
+              );
+
+              if ('href' in item) {
+                return (
+                  <Link key={item.label} href={item.href}>
+                    <Button
+                      variant="outline"
+                      className="w-full min-h-[80px] justify-start p-6 hover-elevate"
+                      data-testid={item.testId}
+                    >
+                      {content}
+                    </Button>
+                  </Link>
+                );
+              }
+
               return (
                 <Button
                   key={item.label}
                   variant="outline"
                   className="w-full min-h-[80px] justify-start p-6 hover-elevate"
-                  onClick={item.onClick}
+                  onClick={'onClick' in item ? item.onClick : undefined}
                   data-testid={item.testId}
                 >
-                  <div className="flex items-center gap-4 text-left w-full">
-                    <div className="text-primary">
-                      <Icon className="w-10 h-10" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-[20px] font-semibold">{item.label}</p>
-                      <p className="text-[18px] text-muted-foreground font-normal mt-1">
-                        {item.description}
-                      </p>
-                    </div>
-                  </div>
+                  {content}
                 </Button>
               );
             })}
