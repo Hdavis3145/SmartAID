@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertMedicationLogSchema } from "@shared/schema";
+import { insertMedicationLogSchema, insertMedicationSurveySchema } from "@shared/schema";
 import { notificationService, type PushSubscription } from "./notificationService";
 
 // Image paths for pills
@@ -259,6 +259,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to send test notification:", error);
       res.status(500).json({ error: "Failed to send test notification" });
+    }
+  });
+
+  // POST /api/surveys - Submit a medication survey
+  app.post("/api/surveys", async (req, res) => {
+    try {
+      const validatedData = insertMedicationSurveySchema.parse(req.body);
+      const survey = await storage.createMedicationSurvey(validatedData);
+      res.json(survey);
+    } catch (error) {
+      console.error("Failed to create survey:", error);
+      res.status(400).json({ error: "Failed to create survey" });
+    }
+  });
+
+  // GET /api/surveys - Get all surveys
+  app.get("/api/surveys", async (_req, res) => {
+    try {
+      const surveys = await storage.getMedicationSurveys();
+      res.json(surveys);
+    } catch (error) {
+      console.error("Failed to fetch surveys:", error);
+      res.status(500).json({ error: "Failed to fetch surveys" });
+    }
+  });
+
+  // GET /api/surveys/log/:logId - Get survey for a specific medication log
+  app.get("/api/surveys/log/:logId", async (req, res) => {
+    try {
+      const survey = await storage.getSurveyByLogId(req.params.logId);
+      if (!survey) {
+        return res.status(404).json({ error: "Survey not found" });
+      }
+      res.json(survey);
+    } catch (error) {
+      console.error("Failed to fetch survey:", error);
+      res.status(500).json({ error: "Failed to fetch survey" });
     }
   });
 
