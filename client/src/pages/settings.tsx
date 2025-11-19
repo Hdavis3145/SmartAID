@@ -31,18 +31,31 @@ export default function Settings() {
     },
   ];
 
+  const handleLogout = () => {
+    window.location.href = "/api/logout";
+  };
+
   const actionItems = [
     {
       icon: Users,
       label: "Manage Caregivers",
       description: "Add or remove caregiver contacts",
       testId: "button-caregivers",
+      onClick: () => console.log("Manage Caregivers"),
     },
     {
       icon: HelpCircle,
       label: "Help & Support",
       description: "Get help using SmartAid",
       testId: "button-help",
+      onClick: () => console.log("Help & Support"),
+    },
+    {
+      icon: LogOut,
+      label: "Log Out",
+      description: "Sign out of your account",
+      testId: "button-logout",
+      onClick: handleLogout,
     },
   ];
 
@@ -103,7 +116,7 @@ export default function Settings() {
                   key={item.label}
                   variant="outline"
                   className="w-full min-h-[80px] justify-start p-6 hover-elevate"
-                  onClick={() => console.log(item.label)}
+                  onClick={item.onClick}
                   data-testid={item.testId}
                 >
                   <div className="flex items-center gap-4 text-left w-full">

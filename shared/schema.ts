@@ -131,6 +131,17 @@ export const insertMedicationSchema = createInsertSchema(medications).omit({
   userId: true, // will be added automatically from auth
 });
 
+export const updateMedicationSchema = insertMedicationSchema.partial().pick({
+  name: true,
+  dosage: true,
+  pillType: true,
+  imageUrl: true,
+  times: true,
+  pillsRemaining: true,
+  refillThreshold: true,
+  lastRefillDate: true,
+});
+
 export const insertMedicationLogSchema = createInsertSchema(medicationLogs).omit({
   id: true,
   userId: true, // will be added automatically from auth
@@ -166,6 +177,7 @@ export const upsertUserSchema = createInsertSchema(users).omit({
 
 // Types
 export type InsertMedication = z.infer<typeof insertMedicationSchema>;
+export type UpdateMedication = z.infer<typeof updateMedicationSchema>;
 export type Medication = typeof medications.$inferSelect;
 export type InsertMedicationLog = z.infer<typeof insertMedicationLogSchema>;
 export type MedicationLog = typeof medicationLogs.$inferSelect;

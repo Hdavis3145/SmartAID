@@ -1,8 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertMedicationLogSchema, insertMedicationSurveySchema } from "@shared/schema";
+import { insertMedicationSchema, updateMedicationSchema, insertMedicationLogSchema, insertMedicationSurveySchema } from "@shared/schema";
 import { notificationService, type PushSubscription } from "./notificationService";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 
 // Image paths for pills
 const whiteTabletImg = "/attached_assets/generated_images/White_round_tablet_pill_531071e0.png";
@@ -27,11 +28,28 @@ const pillDatabase = [
 ];
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup authentication (Replit Auth)
+  await setupAuth(app);
+
+  // GET /api/auth/user - Get current authenticated user
+  app.get("/api/auth/user", isAuthenticated, async (req, res) => {
+    try {
+      const claims = (req.user as any).claims;
+      const user = await storage.getUser(claims.sub);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
   
   // GET /api/medications - Get all medications in schedule
-  app.get("/api/medications", async (_req, res) => {
+  app.get("/api/medications", isAuthenticated, async (req, res) => {
     try {
-      const medications = await storage.getMedications();
+      const userId = (req.user as any).claims.sub;
+      const medications = await storage.getMedications(userId);
       res.json(medications);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch medications" });
@@ -39,9 +57,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/medications/:id - Get specific medication
-  app.get("/api/medications/:id", async (req, res) => {
+  app.get("/api/medications/:id", isAuthenticated, async (req, res) => {
     try {
-      const medication = await storage.getMedication(req.params.id);
+      const userId = (req.user as any).claims.sub;
+      const medication = await storage.getMedication(req.params.id, userId);
       if (!medication) {
         return res.status(404).json({ error: "Medication not found" });
       }
@@ -51,14 +70,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // POST /api/identify-pill - Identify a scanned pill
-  app.post("/api/identify-pill", async (req, res) => {
+  // POST /api/medications - Create a new medication
+  app.post("/api/medications", isAuthenticated, async (req, res) => {
     try {
+      const userId = (req.user as any).claims.sub;
+      const validatedData = insertMedicationSchema.parse(req.body);
+      const medication = await storage.createMedication(validatedData, userId);
+      res.json(medication);
+    } catch (error) {
+      console.error("Failed to create medication:", error);
+      res.status(400).json({ error: "Failed to create medication" });
+    }
+  });
+
+  // PATCH /api/medications/:id - Update a medication
+  app.patch("/api/medications/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any).claims.sub;
+      // Use dedicated update schema that only allows specific fields
+      const validatedData = updateMedicationSchema.parse(req.body);
+      const medication = await storage.updateMedication(req.params.id, validatedData, userId);
+      if (!medication) {
+        return res.status(404).json({ error: "Medication not found" });
+      }
+      res.json(medication);
+    } catch (error) {
+      console.error("Failed to update medication:", error);
+      res.status(400).json({ error: "Failed to update medication" });
+    }
+  });
+
+  // DELETE /api/medications/:id - Delete a medication
+  app.delete("/api/medications/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any).claims.sub;
+      const deleted = await storage.deleteMedication(req.params.id, userId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Medication not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete medication:", error);
+      res.status(500).json({ error: "Failed to delete medication" });
+    }
+  });
+
+  // POST /api/identify-pill - Identify a scanned pill
+  app.post("/api/identify-pill", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.user as any).claims.sub;
       // Get user's scheduled medications
-      const scheduledMeds = await storage.getMedications();
+      const scheduledMeds = await storage.getMedications(userId);
       
       // Filter pill database to only include scheduled medications
-      // Note: Matches by name only. For production, consider matching by unique IDs
       const scheduledPills = pillDatabase.filter(pill => 
         scheduledMeds.some(med => med.name === pill.name)
       );
@@ -84,10 +148,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/logs - Create a medication log entry
-  app.post("/api/logs", async (req, res) => {
+  app.post("/api/logs", isAuthenticated, async (req, res) => {
     try {
+      const userId = (req.user as any).claims.sub;
       const validatedData = insertMedicationLogSchema.parse(req.body);
-      const log = await storage.createMedicationLog(validatedData);
+      const log = await storage.createMedicationLog(validatedData, userId);
       res.json(log);
     } catch (error) {
       console.error("Log creation error:", error);
@@ -96,9 +161,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/logs - Get all medication logs
-  app.get("/api/logs", async (_req, res) => {
+  app.get("/api/logs", isAuthenticated, async (req, res) => {
     try {
-      const logs = await storage.getMedicationLogs();
+      const userId = (req.user as any).claims.sub;
+      const logs = await storage.getMedicationLogs(userId);
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch logs" });
@@ -106,9 +172,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/logs/today - Get today's medication logs
-  app.get("/api/logs/today", async (_req, res) => {
+  app.get("/api/logs/today", isAuthenticated, async (req, res) => {
     try {
-      const logs = await storage.getTodayLogs();
+      const userId = (req.user as any).claims.sub;
+      const logs = await storage.getTodayLogs(userId);
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch today's logs" });
@@ -116,10 +183,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/stats - Get medication statistics
-  app.get("/api/stats", async (_req, res) => {
+  app.get("/api/stats", isAuthenticated, async (req, res) => {
     try {
-      const medications = await storage.getMedications();
-      const todayLogs = await storage.getTodayLogs();
+      const userId = (req.user as any).claims.sub;
+      const medications = await storage.getMedications(userId);
+      const todayLogs = await storage.getTodayLogs(userId);
       
       // Calculate today's schedule
       const today = new Date();
@@ -128,7 +196,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentTimeInMinutes = currentHour * 60 + currentMinute;
 
       // Count total unique doses scheduled for today
-      // Use medication-time pairs to avoid double-counting
       const scheduledDoses = new Set<string>();
       const dosesSoFar = new Set<string>();
       
@@ -155,7 +222,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pendingCount = Math.max(0, scheduledSoFar - takenCount - missedCount);
       
       // Calculate 7-day adherence
-      const allLogs = await storage.getMedicationLogs();
+      const allLogs = await storage.getMedicationLogs(userId);
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
@@ -188,8 +255,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/notifications/subscribe - Subscribe to push notifications
-  app.post("/api/notifications/subscribe", async (req, res) => {
+  app.post("/api/notifications/subscribe", isAuthenticated, async (req, res) => {
     try {
+      const userId = (req.user as any).claims.sub;
       const subscription = req.body as PushSubscription;
       
       // Validate subscription payload
@@ -200,9 +268,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           !subscription.keys.auth) {
         return res.status(400).json({ error: "Invalid subscription payload" });
       }
-
-      // For simplicity, using a default user ID. In production, use authenticated user ID
-      const userId = "default-user";
       
       // Persist subscription to storage
       await storage.upsertSubscription({
@@ -224,9 +289,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/notifications/unsubscribe - Unsubscribe from push notifications
-  app.post("/api/notifications/unsubscribe", async (req, res) => {
+  app.post("/api/notifications/unsubscribe", isAuthenticated, async (req, res) => {
     try {
-      const userId = "default-user";
+      const userId = (req.user as any).claims.sub;
       
       // Remove from storage
       await storage.deleteSubscription(userId);
@@ -242,9 +307,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/notifications/test - Send a test notification
-  app.post("/api/notifications/test", async (req, res) => {
+  app.post("/api/notifications/test", isAuthenticated, async (req, res) => {
     try {
-      const userId = "default-user";
+      const userId = (req.user as any).claims.sub;
       const success = await notificationService.sendRefillReminder(
         userId,
         "Test Medication",
@@ -263,10 +328,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/surveys - Submit a medication survey
-  app.post("/api/surveys", async (req, res) => {
+  app.post("/api/surveys", isAuthenticated, async (req, res) => {
     try {
+      const userId = (req.user as any).claims.sub;
       const validatedData = insertMedicationSurveySchema.parse(req.body);
-      const survey = await storage.createMedicationSurvey(validatedData);
+      const survey = await storage.createMedicationSurvey(validatedData, userId);
       res.json(survey);
     } catch (error) {
       console.error("Failed to create survey:", error);
@@ -275,9 +341,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/surveys - Get all surveys
-  app.get("/api/surveys", async (_req, res) => {
+  app.get("/api/surveys", isAuthenticated, async (req, res) => {
     try {
-      const surveys = await storage.getMedicationSurveys();
+      const userId = (req.user as any).claims.sub;
+      const surveys = await storage.getMedicationSurveys(userId);
       res.json(surveys);
     } catch (error) {
       console.error("Failed to fetch surveys:", error);
@@ -286,9 +353,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/surveys/log/:logId - Get survey for a specific medication log
-  app.get("/api/surveys/log/:logId", async (req, res) => {
+  app.get("/api/surveys/log/:logId", isAuthenticated, async (req, res) => {
     try {
-      const survey = await storage.getSurveyByLogId(req.params.logId);
+      const userId = (req.user as any).claims.sub;
+      const survey = await storage.getSurveyByLogId(req.params.logId, userId);
       if (!survey) {
         return res.status(404).json({ error: "Survey not found" });
       }

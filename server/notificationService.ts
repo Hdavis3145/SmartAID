@@ -41,10 +41,9 @@ class NotificationService {
 
   async loadPersistedSubscriptions(): Promise<void> {
     try {
-      // For now, load default-user subscription
-      // In production, would load all users' subscriptions
-      const subscription = await storage.getSubscription('default-user');
-      if (subscription) {
+      // Load all users' subscriptions from database
+      const allSubscriptions = await storage.getAllSubscriptions();
+      for (const subscription of allSubscriptions) {
         const pushSubscription: PushSubscription = {
           endpoint: subscription.endpoint,
           keys: {
@@ -63,37 +62,24 @@ class NotificationService {
 
   async checkAndSendRefillReminders(): Promise<void> {
     try {
-      // DESIGN NOTE: SmartAid is a single-user personal medication tracker.
-      // The entire application (schema, storage, UI) is designed for ONE user managing
-      // their own medications. There is no userId field in the medications table,
-      // no authentication system, and no multi-tenant support.
-      //
-      // For multi-user SaaS deployment, the following changes would be required:
-      // 1. Add userId field to medications, medicationLogs tables
-      // 2. Implement authentication and authorization
-      // 3. Update storage methods to filter by userId
-      // 4. Iterate through subscriptions and send reminders per-user
-      //
-      // Current single-user implementation is appropriate for the stated scope:
-      // "Build SmartAid for elderly medication tracking" (personal use)
-      
-      const userId = 'default-user';
+      // Check refill reminders for all users with active subscriptions
+      const userIds = Array.from(this.subscriptions.keys());
+      for (const userId of userIds) {
+        try {
+          const medications = await storage.getMedications(userId);
 
-      // Only send if this user has an active subscription
-      if (!this.subscriptions.has(userId)) {
-        return; // User hasn't enabled notifications, skip
-      }
+          for (const med of medications) {
+            const pillsRemaining = med.pillsRemaining ?? 0;
+            const refillThreshold = med.refillThreshold ?? 7;
 
-      const medications = await storage.getMedications();
-
-      for (const med of medications) {
-        const pillsRemaining = med.pillsRemaining ?? 0;
-        const refillThreshold = med.refillThreshold ?? 7;
-
-        // Send notification if medication needs refilling
-        if (pillsRemaining > 0 && pillsRemaining <= refillThreshold) {
-          console.log(`Sending refill reminder for ${med.name}: ${pillsRemaining} pills remaining`);
-          await this.sendRefillReminder(userId, med.name, pillsRemaining);
+            // Send notification if medication needs refilling
+            if (pillsRemaining > 0 && pillsRemaining <= refillThreshold) {
+              console.log(`Sending refill reminder for ${med.name}: ${pillsRemaining} pills remaining`);
+              await this.sendRefillReminder(userId, med.name, pillsRemaining);
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to check refill reminders for user ${userId}:`, error);
         }
       }
     } catch (error) {

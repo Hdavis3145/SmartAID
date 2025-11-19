@@ -28,6 +28,8 @@ export interface IStorage {
   getMedications(userId: string): Promise<Medication[]>;
   getMedication(id: string, userId: string): Promise<Medication | undefined>;
   createMedication(medication: InsertMedication, userId: string): Promise<Medication>;
+  updateMedication(id: string, medication: Partial<InsertMedication>, userId: string): Promise<Medication | undefined>;
+  deleteMedication(id: string, userId: string): Promise<boolean>;
   
   // Medication Logs
   getMedicationLogs(userId: string): Promise<MedicationLog[]>;
@@ -96,6 +98,34 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return medication;
+  }
+
+  async updateMedication(id: string, medicationUpdate: Partial<InsertMedication>, userId: string): Promise<Medication | undefined> {
+    // Pre-flight check: verify the medication exists and belongs to the authenticated user
+    const existing = await this.getMedication(id, userId);
+    if (!existing) {
+      return undefined; // Medication not found or doesn't belong to user
+    }
+    
+    // Defensively ensure userId cannot be changed by explicitly re-setting it
+    const { userId: _, ...safeUpdate} = medicationUpdate as any;
+    const [medication] = await db
+      .update(medications)
+      .set({
+        ...safeUpdate,
+        userId, // Always force userId to the authenticated user
+      })
+      .where(and(eq(medications.id, id), eq(medications.userId, userId)))
+      .returning();
+    return medication || undefined;
+  }
+
+  async deleteMedication(id: string, userId: string): Promise<boolean> {
+    const result = await db
+      .delete(medications)
+      .where(and(eq(medications.id, id), eq(medications.userId, userId)))
+      .returning();
+    return result.length > 0;
   }
 
   // Medication Logs
