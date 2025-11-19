@@ -22,20 +22,12 @@ export async function verifyPassword(
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
-  
-  console.log("Setting up session store with DATABASE_URL:", process.env.DATABASE_URL?.substring(0, 30) + "...");
-  
   const sessionStore = new pgStore({
     conString: process.env.DATABASE_URL,
     createTableIfMissing: false,
     ttl: sessionTtl,
     tableName: "sessions",
   });
-  
-  sessionStore.on('error', (err) => {
-    console.error("Session store error:", err);
-  });
-  
   const isProduction = process.env.NODE_ENV === "production";
   return session({
     secret: process.env.SESSION_SECRET!,

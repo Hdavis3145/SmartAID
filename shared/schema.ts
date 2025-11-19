@@ -177,8 +177,8 @@ export const upsertUserSchema = createInsertSchema(users).omit({
 });
 
 export const signupSchema = z.object({
-  email: z.string().min(1, "Email is required"),
-  password: z.string().min(1, "Password is required"),
+  email: z.string().email(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
   confirmPassword: z.string().min(1, "Please confirm your password"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
@@ -189,7 +189,7 @@ export const signupSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z.string().min(1, "Email is required"),
+  email: z.string().email(),
   password: z.string().min(1, "Password is required"),
 });
 

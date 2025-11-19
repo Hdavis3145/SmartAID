@@ -53,19 +53,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       req.login(user, (err) => {
         if (err) {
-          console.error("Login after signup error:", err);
           return res.status(500).json({ error: "Failed to log in after signup" });
         }
         const { passwordHash: _, ...userWithoutPassword } = user;
         res.json(userWithoutPassword);
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error("Signup error:", error);
-      // If it's a Zod validation error, return the specific message
-      if (error.name === 'ZodError' && error.errors && error.errors.length > 0) {
-        return res.status(400).json({ error: error.errors[0].message });
-      }
-      res.status(400).json({ error: error.message || "Failed to create account" });
+      res.status(400).json({ error: "Failed to create account" });
     }
   });
 

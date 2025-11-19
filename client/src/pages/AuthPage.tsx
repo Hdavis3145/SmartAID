@@ -132,8 +132,8 @@ export default function AuthPage() {
                             <FormControl>
                               <Input
                                 {...field}
-                                type="text"
-                                placeholder="Enter your email"
+                                type="email"
+                                placeholder="your@email.com"
                                 className="h-14 text-xl"
                                 data-testid="input-login-email"
                               />
@@ -187,8 +187,8 @@ export default function AuthPage() {
                             <FormControl>
                               <Input
                                 {...field}
-                                type="text"
-                                placeholder="Enter your email"
+                                type="email"
+                                placeholder="your@email.com"
                                 className="h-14 text-xl"
                                 data-testid="input-signup-email"
                               />
@@ -213,6 +213,7 @@ export default function AuthPage() {
                                 data-testid="input-signup-password"
                               />
                             </FormControl>
+                            <FormDescription className="text-base">At least 8 characters</FormDescription>
                             <FormMessage data-testid="error-signup-password" />
                           </FormItem>
                         )}
