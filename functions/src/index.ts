@@ -17,7 +17,7 @@ const app = express();
 
 // Middleware
 app.use(cors({ origin: true }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // Allow large image uploads for pill scanning
 
 // Default user ID for single-user deployment
 const DEFAULT_USER_ID = 'default-user';

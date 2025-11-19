@@ -13,11 +13,12 @@ declare module 'http' {
   }
 }
 app.use(express.json({
+  limit: '50mb', // Allow large image uploads for pill scanning
   verify: (req, _res, buf) => {
     req.rawBody = buf;
   }
 }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ limit: '50mb', extended: false }));
 
 // Serve static files from attached_assets
 app.use('/attached_assets', express.static('attached_assets'));
