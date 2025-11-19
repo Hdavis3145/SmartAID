@@ -83,10 +83,15 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
   try {
     // Get VAPID public key from server
     const response = await fetch('/api/notifications/vapid-public-key');
+    
+    if (!response.ok) {
+      throw new Error('Server configuration error: Unable to fetch VAPID public key. Push notifications may not be configured.');
+    }
+    
     const { publicKey } = await response.json();
 
-    if (!publicKey) {
-      throw new Error('Failed to get VAPID public key');
+    if (!publicKey || publicKey.trim() === '') {
+      throw new Error('Push notifications are not configured on the server. VAPID keys are missing.');
     }
 
     // Get service worker registration
@@ -108,14 +113,16 @@ export async function subscribeToPushNotifications(): Promise<boolean> {
     });
 
     if (!subscribeResponse.ok) {
-      throw new Error('Failed to send subscription to server');
+      const errorData = await subscribeResponse.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to save subscription to server');
     }
 
     console.log('Successfully subscribed to push notifications');
     return true;
   } catch (error) {
     console.error('Failed to subscribe to push notifications:', error);
-    return false;
+    // Re-throw the error so the UI can display the specific error message
+    throw error;
   }
 }
 

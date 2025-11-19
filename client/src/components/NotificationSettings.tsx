@@ -60,26 +60,24 @@ export function NotificationSettings() {
       }
 
       // Subscribe to push notifications
-      const subscribed = await subscribeToPushNotifications();
+      await subscribeToPushNotifications();
       
-      if (subscribed) {
-        setIsSubscribed(true);
-        toast({
-          title: "Notifications Enabled",
-          description: "You will now receive medication refill reminders.",
-        });
-      } else {
-        toast({
-          title: "Subscription Failed",
-          description: "Unable to enable notifications. Please try again.",
-          variant: "destructive",
-        });
-      }
+      setIsSubscribed(true);
+      toast({
+        title: "Notifications Enabled",
+        description: "You will now receive medication refill reminders.",
+      });
     } catch (error) {
       console.error("Failed to enable notifications:", error);
+      
+      // Display specific error message from the error
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : "An error occurred while enabling notifications.";
+      
       toast({
-        title: "Error",
-        description: "An error occurred while enabling notifications.",
+        title: "Notification Setup Failed",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
