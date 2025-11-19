@@ -153,23 +153,23 @@ export function NotificationSettings() {
   return (
     <Card>
       <CardHeader className="gap-1 space-y-0 pb-4">
-        <CardTitle className="flex items-center gap-3 text-2xl">
-          <Bell className="h-8 w-8 text-primary" />
+        <CardTitle className="flex items-center gap-3 text-[28px]">
+          <Bell className="h-10 w-10 text-primary" />
           Smart Notifications
         </CardTitle>
-        <CardDescription className="text-lg">
+        <CardDescription className="text-[20px]">
           Get notified when your medications need refilling
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {permission.denied && (
-          <div className="flex items-start gap-3 p-4 rounded-md bg-destructive/10 border border-destructive/20">
-            <AlertCircle className="h-6 w-6 text-destructive flex-shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 p-4 rounded-md bg-destructive/10 border-2 border-destructive/30">
+            <AlertCircle className="h-8 w-8 text-destructive flex-shrink-0 mt-0.5" />
             <div className="flex-1 space-y-2">
-              <p className="text-lg font-medium text-destructive">
+              <p className="text-[22px] font-semibold text-destructive">
                 Notifications Blocked
               </p>
-              <p className="text-base text-muted-foreground">
+              <p className="text-[20px] text-muted-foreground">
                 Please enable notifications in your browser settings to receive refill reminders.
               </p>
             </div>
@@ -178,13 +178,13 @@ export function NotificationSettings() {
 
         {isSubscribed ? (
           <div className="space-y-4">
-            <div className="flex items-start gap-3 p-4 rounded-md bg-primary/10 border border-primary/20">
-              <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 p-5 rounded-md bg-primary/10 border-2 border-primary/30">
+              <CheckCircle2 className="h-8 w-8 text-primary flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-lg font-medium text-primary">
+                <p className="text-[22px] font-semibold text-primary">
                   Notifications Active
                 </p>
-                <p className="text-base text-muted-foreground mt-1">
+                <p className="text-[20px] text-muted-foreground mt-1">
                   You will receive alerts when medications are running low.
                 </p>
               </div>
@@ -192,56 +192,53 @@ export function NotificationSettings() {
 
             <div className="flex flex-col gap-3">
               <Button
-                size="lg"
                 variant="outline"
                 onClick={handleTestNotification}
                 disabled={isLoading}
-                className="w-full min-h-14 text-lg"
+                className="w-full min-h-[64px] text-[22px]"
                 data-testid="button-test-notification"
               >
-                <Bell className="h-5 w-5 mr-2" />
+                <Bell className="h-6 w-6 mr-2" />
                 Send Test Notification
               </Button>
 
               <Button
-                size="lg"
                 variant="outline"
                 onClick={handleDisableNotifications}
                 disabled={isLoading}
-                className="w-full min-h-14 text-lg"
+                className="w-full min-h-[64px] text-[22px]"
                 data-testid="button-disable-notifications"
               >
-                <BellOff className="h-5 w-5 mr-2" />
+                <BellOff className="h-6 w-6 mr-2" />
                 Disable Notifications
               </Button>
             </div>
           </div>
         ) : (
           <Button
-            size="lg"
             onClick={handleEnableNotifications}
             disabled={isLoading || permission.denied}
-            className="w-full min-h-14 text-lg"
+            className="w-full min-h-[64px] text-[22px]"
             data-testid="button-enable-notifications"
           >
-            <Bell className="h-5 w-5 mr-2" />
+            <Bell className="h-6 w-6 mr-2" />
             {isLoading ? "Setting up..." : "Enable Smart Reminders"}
           </Button>
         )}
 
         <div className="pt-4 border-t space-y-3">
-          <h3 className="font-semibold text-lg">How It Works</h3>
-          <ul className="space-y-2 text-base text-muted-foreground">
-            <li className="flex items-start gap-2">
-              <span className="text-primary mt-1">•</span>
+          <h3 className="font-semibold text-[22px]">How It Works</h3>
+          <ul className="space-y-3 text-[20px] text-muted-foreground">
+            <li className="flex items-start gap-3">
+              <span className="text-primary mt-1 text-[24px] font-bold">•</span>
               <span>Automatically tracks your medication inventory</span>
             </li>
-            <li className="flex items-start gap-2">
-              <span className="text-primary mt-1">•</span>
+            <li className="flex items-start gap-3">
+              <span className="text-primary mt-1 text-[24px] font-bold">•</span>
               <span>Sends alerts when pills are running low</span>
             </li>
-            <li className="flex items-start gap-2">
-              <span className="text-primary mt-1">•</span>
+            <li className="flex items-start gap-3">
+              <span className="text-primary mt-1 text-[24px] font-bold">•</span>
               <span>Helps you refill on time, every time</span>
             </li>
           </ul>

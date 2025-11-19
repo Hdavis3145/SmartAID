@@ -27,6 +27,16 @@ export const medicationLogs = pgTable("medication_logs", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
+export const notificationSubscriptions = pgTable("notification_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: text("user_id").notNull(),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  expirationTime: timestamp("expiration_time"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
 export const insertMedicationSchema = createInsertSchema(medications).omit({
   id: true,
 });
@@ -40,7 +50,14 @@ export const insertMedicationLogSchema = createInsertSchema(medicationLogs).omit
   ).optional(),
 });
 
+export const insertNotificationSubscriptionSchema = createInsertSchema(notificationSubscriptions).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertMedication = z.infer<typeof insertMedicationSchema>;
 export type Medication = typeof medications.$inferSelect;
 export type InsertMedicationLog = z.infer<typeof insertMedicationLogSchema>;
 export type MedicationLog = typeof medicationLogs.$inferSelect;
+export type InsertNotificationSubscription = z.infer<typeof insertNotificationSubscriptionSchema>;
+export type NotificationSubscription = typeof notificationSubscriptions.$inferSelect;

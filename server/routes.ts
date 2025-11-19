@@ -192,12 +192,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const subscription = req.body as PushSubscription;
       
-      if (!subscription || !subscription.endpoint) {
-        return res.status(400).json({ error: "Invalid subscription" });
+      // Validate subscription payload
+      if (!subscription || 
+          !subscription.endpoint || 
+          !subscription.keys ||
+          !subscription.keys.p256dh ||
+          !subscription.keys.auth) {
+        return res.status(400).json({ error: "Invalid subscription payload" });
       }
 
       // For simplicity, using a default user ID. In production, use authenticated user ID
       const userId = "default-user";
+      
+      // Persist subscription to storage
+      await storage.upsertSubscription({
+        userId,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth,
+        expirationTime: subscription.expirationTime ? new Date(subscription.expirationTime) : null,
+      });
+      
+      // Also add to notification service for immediate use
       notificationService.addSubscription(userId, subscription);
       
       res.json({ success: true, message: "Subscription added successfully" });
@@ -211,6 +227,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/notifications/unsubscribe", async (req, res) => {
     try {
       const userId = "default-user";
+      
+      // Remove from storage
+      await storage.deleteSubscription(userId);
+      
+      // Also remove from notification service
       notificationService.removeSubscription(userId);
       
       res.json({ success: true, message: "Subscription removed successfully" });

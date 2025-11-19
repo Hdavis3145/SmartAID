@@ -1,15 +1,19 @@
 import webPush from 'web-push';
 
-// VAPID keys for push notifications
-const VAPID_PUBLIC_KEY = 'BBEsjVCx64dmyQ3QVXU1cQVjAx5h9dFMoVcDQt3-pvrEtDtv4CuhVcb4qjqhA26JucFEBPaYy7nOFxhsS4J8SfE';
-const VAPID_PRIVATE_KEY = 'pzYanYnNQBYZXiYnM-955MAiur3SD1rOn2WD9tGl2tM';
+// VAPID keys from environment variables
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 
-// Configure web-push with VAPID details
-webPush.setVapidDetails(
-  'mailto:smartaid@example.com',
-  VAPID_PUBLIC_KEY,
-  VAPID_PRIVATE_KEY
-);
+if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+  console.error('VAPID keys not configured. Push notifications will not work.');
+} else {
+  // Configure web-push with VAPID details
+  webPush.setVapidDetails(
+    'mailto:smartaid@example.com',
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY
+  );
+}
 
 export interface PushSubscription {
   endpoint: string;
@@ -34,7 +38,7 @@ class NotificationService {
   private subscriptions: Map<string, PushSubscription> = new Map();
 
   getVapidPublicKey(): string {
-    return VAPID_PUBLIC_KEY;
+    return VAPID_PUBLIC_KEY || '';
   }
 
   addSubscription(userId: string, subscription: PushSubscription): void {

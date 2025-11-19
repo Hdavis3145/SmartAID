@@ -1,4 +1,4 @@
-import { type Medication, type InsertMedication, type MedicationLog, type InsertMedicationLog } from "@shared/schema";
+import { type Medication, type InsertMedication, type MedicationLog, type InsertMedicationLog, type NotificationSubscription, type InsertNotificationSubscription } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 // Image paths for pills
@@ -17,15 +17,22 @@ export interface IStorage {
   getMedicationLogs(): Promise<MedicationLog[]>;
   createMedicationLog(log: InsertMedicationLog): Promise<MedicationLog>;
   getTodayLogs(): Promise<MedicationLog[]>;
+  
+  // Notification Subscriptions
+  getSubscription(userId: string): Promise<NotificationSubscription | undefined>;
+  upsertSubscription(subscription: InsertNotificationSubscription): Promise<NotificationSubscription>;
+  deleteSubscription(userId: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
   private medications: Map<string, Medication>;
   private medicationLogs: Map<string, MedicationLog>;
+  private notificationSubscriptions: Map<string, NotificationSubscription>;
 
   constructor() {
     this.medications = new Map();
     this.medicationLogs = new Map();
+    this.notificationSubscriptions = new Map();
     this.initializeSampleData();
   }
 
@@ -127,7 +134,13 @@ export class MemStorage implements IStorage {
 
   async createMedication(insertMedication: InsertMedication): Promise<Medication> {
     const id = randomUUID();
-    const medication: Medication = { ...insertMedication, id };
+    const medication: Medication = { 
+      ...insertMedication, 
+      id,
+      pillsRemaining: insertMedication.pillsRemaining ?? 30,
+      refillThreshold: insertMedication.refillThreshold ?? 7,
+      lastRefillDate: insertMedication.lastRefillDate ?? null,
+    };
     this.medications.set(id, medication);
     return medication;
   }
@@ -167,6 +180,33 @@ export class MemStorage implements IStorage {
         return logDate >= today && logDate < tomorrow;
       })
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  // Notification Subscriptions
+  async getSubscription(userId: string): Promise<NotificationSubscription | undefined> {
+    return this.notificationSubscriptions.get(userId);
+  }
+
+  async upsertSubscription(insertSubscription: InsertNotificationSubscription): Promise<NotificationSubscription> {
+    const existing = this.notificationSubscriptions.get(insertSubscription.userId);
+    const id = existing?.id || randomUUID();
+    
+    const subscription: NotificationSubscription = {
+      id,
+      userId: insertSubscription.userId,
+      endpoint: insertSubscription.endpoint,
+      p256dh: insertSubscription.p256dh,
+      auth: insertSubscription.auth,
+      expirationTime: insertSubscription.expirationTime ?? null,
+      createdAt: existing?.createdAt || new Date(),
+    };
+    
+    this.notificationSubscriptions.set(insertSubscription.userId, subscription);
+    return subscription;
+  }
+
+  async deleteSubscription(userId: string): Promise<void> {
+    this.notificationSubscriptions.delete(userId);
   }
 }
 
