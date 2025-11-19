@@ -1,248 +1,209 @@
-import { type Medication, type InsertMedication, type MedicationLog, type InsertMedicationLog, type NotificationSubscription, type InsertNotificationSubscription, type MedicationSurvey, type InsertMedicationSurvey } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// Image paths for pills
-const whiteTabletImg = "/attached_assets/generated_images/White_round_tablet_pill_531071e0.png";
-const blueCapsuleImg = "/attached_assets/generated_images/Blue_oval_capsule_90e60c59.png";
-const yellowTabletImg = "/attached_assets/generated_images/Yellow_circular_tablet_b7928714.png";
-const pinkPillImg = "/attached_assets/generated_images/Pink_round_pill_056d7a48.png";
+// Database storage implementation using PostgreSQL and Drizzle ORM
+import { 
+  type Medication, 
+  type InsertMedication, 
+  type MedicationLog, 
+  type InsertMedicationLog, 
+  type NotificationSubscription, 
+  type InsertNotificationSubscription, 
+  type MedicationSurvey, 
+  type InsertMedicationSurvey,
+  type User,
+  type UpsertUser,
+  medications,
+  medicationLogs,
+  notificationSubscriptions,
+  medicationSurveys,
+  users,
+} from "@shared/schema";
+import { db } from "./db";
+import { eq, and, gte, desc } from "drizzle-orm";
 
 export interface IStorage {
+  // User operations (required for Replit Auth)
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  
   // Medications
-  getMedications(): Promise<Medication[]>;
-  getMedication(id: string): Promise<Medication | undefined>;
-  createMedication(medication: InsertMedication): Promise<Medication>;
+  getMedications(userId: string): Promise<Medication[]>;
+  getMedication(id: string, userId: string): Promise<Medication | undefined>;
+  createMedication(medication: InsertMedication, userId: string): Promise<Medication>;
   
   // Medication Logs
-  getMedicationLogs(): Promise<MedicationLog[]>;
-  createMedicationLog(log: InsertMedicationLog): Promise<MedicationLog>;
-  getTodayLogs(): Promise<MedicationLog[]>;
+  getMedicationLogs(userId: string): Promise<MedicationLog[]>;
+  createMedicationLog(log: InsertMedicationLog, userId: string): Promise<MedicationLog>;
+  getTodayLogs(userId: string): Promise<MedicationLog[]>;
   
   // Notification Subscriptions
   getSubscription(userId: string): Promise<NotificationSubscription | undefined>;
   upsertSubscription(subscription: InsertNotificationSubscription): Promise<NotificationSubscription>;
   deleteSubscription(userId: string): Promise<void>;
+  getAllSubscriptions(): Promise<NotificationSubscription[]>;
   
   // Medication Surveys
-  createMedicationSurvey(survey: InsertMedicationSurvey): Promise<MedicationSurvey>;
-  getMedicationSurveys(): Promise<MedicationSurvey[]>;
-  getSurveyByLogId(medicationLogId: string): Promise<MedicationSurvey | undefined>;
+  createMedicationSurvey(survey: InsertMedicationSurvey, userId: string): Promise<MedicationSurvey>;
+  getMedicationSurveys(userId: string): Promise<MedicationSurvey[]>;
+  getSurveyByLogId(medicationLogId: string, userId: string): Promise<MedicationSurvey | undefined>;
 }
 
-export class MemStorage implements IStorage {
-  private medications: Map<string, Medication>;
-  private medicationLogs: Map<string, MedicationLog>;
-  private notificationSubscriptions: Map<string, NotificationSubscription>;
-  private medicationSurveys: Map<string, MedicationSurvey>;
-
-  constructor() {
-    this.medications = new Map();
-    this.medicationLogs = new Map();
-    this.notificationSubscriptions = new Map();
-    this.medicationSurveys = new Map();
-    this.initializeSampleData();
+export class DatabaseStorage implements IStorage {
+  // User operations (required for Replit Auth)
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
   }
 
-  private initializeSampleData() {
-    // Initialize with sample medications
-    const sampleMeds: Partial<Medication>[] = [
-      {
-        name: "Lisinopril",
-        dosage: "10mg",
-        pillType: "white-round",
-        imageUrl: whiteTabletImg,
-        times: ["08:00", "20:00"],
-        pillsRemaining: 25,
-        refillThreshold: 7,
-        lastRefillDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-      },
-      {
-        name: "Metformin",
-        dosage: "500mg",
-        pillType: "blue-oval",
-        imageUrl: blueCapsuleImg,
-        times: ["09:00", "21:00"],
-        pillsRemaining: 45,
-        refillThreshold: 7,
-        lastRefillDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
-      },
-      {
-        name: "Atorvastatin",
-        dosage: "20mg",
-        pillType: "yellow-round",
-        imageUrl: yellowTabletImg,
-        times: ["20:00"],
-        pillsRemaining: 5,
-        refillThreshold: 7,
-        lastRefillDate: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000), // 20 days ago
-      },
-      {
-        name: "Levothyroxine",
-        dosage: "50mcg",
-        pillType: "pink-round",
-        imageUrl: pinkPillImg,
-        times: ["07:00"],
-        pillsRemaining: 30,
-        refillThreshold: 7,
-        lastRefillDate: new Date(),
-      },
-    ];
-
-    sampleMeds.forEach(med => {
-      const id = randomUUID();
-      this.medications.set(id, { ...(med as Medication), id });
-    });
-
-    // Initialize with some sample logs for today
-    const today = new Date();
-    const medsArray = Array.from(this.medications.values());
-    
-    if (medsArray.length > 0) {
-      // Log first medication as taken
-      const log1: MedicationLog = {
-        id: randomUUID(),
-        medicationId: medsArray[0].id,
-        medicationName: medsArray[0].name,
-        scheduledTime: medsArray[0].times[0],
-        takenTime: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 8, 5),
-        status: "taken",
-        confidence: 95,
-        scannedPillType: medsArray[0].pillType,
-        createdAt: new Date(),
-      };
-      this.medicationLogs.set(log1.id, log1);
-
-      // Log second medication as taken
-      if (medsArray.length > 3) {
-        const log2: MedicationLog = {
-          id: randomUUID(),
-          medicationId: medsArray[3].id,
-          medicationName: medsArray[3].name,
-          scheduledTime: medsArray[3].times[0],
-          takenTime: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 7, 10),
-          status: "taken",
-          confidence: 92,
-          scannedPillType: medsArray[3].pillType,
-          createdAt: new Date(),
-        };
-        this.medicationLogs.set(log2.id, log2);
-      }
-    }
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values({
+        ...userData,
+        role: userData.role || 'patient',
+      })
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
   }
 
   // Medications
-  async getMedications(): Promise<Medication[]> {
-    return Array.from(this.medications.values());
+  async getMedications(userId: string): Promise<Medication[]> {
+    return await db
+      .select()
+      .from(medications)
+      .where(eq(medications.userId, userId));
   }
 
-  async getMedication(id: string): Promise<Medication | undefined> {
-    return this.medications.get(id);
+  async getMedication(id: string, userId: string): Promise<Medication | undefined> {
+    const [medication] = await db
+      .select()
+      .from(medications)
+      .where(and(eq(medications.id, id), eq(medications.userId, userId)));
+    return medication || undefined;
   }
 
-  async createMedication(insertMedication: InsertMedication): Promise<Medication> {
-    const id = randomUUID();
-    const medication: Medication = { 
-      ...insertMedication, 
-      id,
-      pillsRemaining: insertMedication.pillsRemaining ?? 30,
-      refillThreshold: insertMedication.refillThreshold ?? 7,
-      lastRefillDate: insertMedication.lastRefillDate ?? null,
-    };
-    this.medications.set(id, medication);
+  async createMedication(insertMedication: InsertMedication, userId: string): Promise<Medication> {
+    const [medication] = await db
+      .insert(medications)
+      .values({
+        ...insertMedication,
+        userId,
+      })
+      .returning();
     return medication;
   }
 
   // Medication Logs
-  async getMedicationLogs(): Promise<MedicationLog[]> {
-    return Array.from(this.medicationLogs.values())
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  async getMedicationLogs(userId: string): Promise<MedicationLog[]> {
+    return await db
+      .select()
+      .from(medicationLogs)
+      .where(eq(medicationLogs.userId, userId))
+      .orderBy(desc(medicationLogs.createdAt));
   }
 
-  async createMedicationLog(insertLog: InsertMedicationLog): Promise<MedicationLog> {
-    const id = randomUUID();
-    const log: MedicationLog = {
-      id,
-      medicationId: insertLog.medicationId,
-      medicationName: insertLog.medicationName,
-      scheduledTime: insertLog.scheduledTime,
-      takenTime: insertLog.takenTime ?? null,
-      status: insertLog.status,
-      confidence: insertLog.confidence ?? null,
-      scannedPillType: insertLog.scannedPillType ?? null,
-      createdAt: new Date(),
-    };
-    this.medicationLogs.set(id, log);
+  async createMedicationLog(insertLog: InsertMedicationLog, userId: string): Promise<MedicationLog> {
+    const [log] = await db
+      .insert(medicationLogs)
+      .values({
+        ...insertLog,
+        userId,
+      })
+      .returning();
     return log;
   }
 
-  async getTodayLogs(): Promise<MedicationLog[]> {
+  async getTodayLogs(userId: string): Promise<MedicationLog[]> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    return Array.from(this.medicationLogs.values())
-      .filter(log => {
-        const logDate = new Date(log.createdAt);
-        return logDate >= today && logDate < tomorrow;
-      })
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
+    return await db
+      .select()
+      .from(medicationLogs)
+      .where(
+        and(
+          eq(medicationLogs.userId, userId),
+          gte(medicationLogs.createdAt, today)
+        )
+      )
+      .orderBy(desc(medicationLogs.createdAt));
   }
 
   // Notification Subscriptions
   async getSubscription(userId: string): Promise<NotificationSubscription | undefined> {
-    return this.notificationSubscriptions.get(userId);
+    const [subscription] = await db
+      .select()
+      .from(notificationSubscriptions)
+      .where(eq(notificationSubscriptions.userId, userId));
+    return subscription || undefined;
+  }
+
+  async getAllSubscriptions(): Promise<NotificationSubscription[]> {
+    return await db.select().from(notificationSubscriptions);
   }
 
   async upsertSubscription(insertSubscription: InsertNotificationSubscription): Promise<NotificationSubscription> {
-    const existing = this.notificationSubscriptions.get(insertSubscription.userId);
-    const id = existing?.id || randomUUID();
+    const existing = await this.getSubscription(insertSubscription.userId);
     
-    const subscription: NotificationSubscription = {
-      id,
-      userId: insertSubscription.userId,
-      endpoint: insertSubscription.endpoint,
-      p256dh: insertSubscription.p256dh,
-      auth: insertSubscription.auth,
-      expirationTime: insertSubscription.expirationTime ?? null,
-      createdAt: existing?.createdAt || new Date(),
-    };
+    if (existing) {
+      const [subscription] = await db
+        .update(notificationSubscriptions)
+        .set(insertSubscription)
+        .where(eq(notificationSubscriptions.userId, insertSubscription.userId))
+        .returning();
+      return subscription;
+    }
     
-    this.notificationSubscriptions.set(insertSubscription.userId, subscription);
+    const [subscription] = await db
+      .insert(notificationSubscriptions)
+      .values(insertSubscription)
+      .returning();
     return subscription;
   }
 
   async deleteSubscription(userId: string): Promise<void> {
-    this.notificationSubscriptions.delete(userId);
+    await db
+      .delete(notificationSubscriptions)
+      .where(eq(notificationSubscriptions.userId, userId));
   }
 
   // Medication Surveys
-  async createMedicationSurvey(insertSurvey: InsertMedicationSurvey): Promise<MedicationSurvey> {
-    const id = randomUUID();
-    const survey: MedicationSurvey = {
-      id,
-      medicationLogId: insertSurvey.medicationLogId,
-      medicationName: insertSurvey.medicationName,
-      hasDizziness: insertSurvey.hasDizziness,
-      hasPain: insertSurvey.hasPain,
-      painLevel: insertSurvey.painLevel ?? null,
-      appetiteLevel: insertSurvey.appetiteLevel,
-      notes: insertSurvey.notes ?? null,
-      createdAt: new Date(),
-    };
-    this.medicationSurveys.set(id, survey);
+  async createMedicationSurvey(insertSurvey: InsertMedicationSurvey, userId: string): Promise<MedicationSurvey> {
+    const [survey] = await db
+      .insert(medicationSurveys)
+      .values({
+        ...insertSurvey,
+        userId,
+      })
+      .returning();
     return survey;
   }
 
-  async getMedicationSurveys(): Promise<MedicationSurvey[]> {
-    return Array.from(this.medicationSurveys.values())
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  async getMedicationSurveys(userId: string): Promise<MedicationSurvey[]> {
+    return await db
+      .select()
+      .from(medicationSurveys)
+      .where(eq(medicationSurveys.userId, userId))
+      .orderBy(desc(medicationSurveys.createdAt));
   }
 
-  async getSurveyByLogId(medicationLogId: string): Promise<MedicationSurvey | undefined> {
-    return Array.from(this.medicationSurveys.values())
-      .find(survey => survey.medicationLogId === medicationLogId);
+  async getSurveyByLogId(medicationLogId: string, userId: string): Promise<MedicationSurvey | undefined> {
+    const [survey] = await db
+      .select()
+      .from(medicationSurveys)
+      .where(
+        and(
+          eq(medicationSurveys.medicationLogId, medicationLogId),
+          eq(medicationSurveys.userId, userId)
+        )
+      );
+    return survey || undefined;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

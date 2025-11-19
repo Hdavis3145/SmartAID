@@ -1,10 +1,36 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, index, jsonb } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Session storage table (required for Replit Auth)
+export const sessions = pgTable(
+  "sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: jsonb("sess").notNull(),
+    expire: timestamp("expire").notNull(),
+  },
+  (table) => [index("IDX_session_expire").on(table.expire)],
+);
+
+// Users table (required for Replit Auth, with role for patient/caregiver)
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").unique(),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  profileImageUrl: varchar("profile_image_url"),
+  role: varchar("role").notNull().default('patient'), // patient or caregiver
+  caregiverId: varchar("caregiver_id"), // if patient, link to caregiver
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
 export const medications = pgTable("medications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // link to patient
   name: text("name").notNull(),
   dosage: text("dosage").notNull(),
   pillType: text("pill_type").notNull(),
@@ -17,6 +43,7 @@ export const medications = pgTable("medications", {
 
 export const medicationLogs = pgTable("medication_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // link to patient
   medicationId: varchar("medication_id").notNull(),
   medicationName: text("medication_name").notNull(),
   scheduledTime: text("scheduled_time").notNull(),
@@ -29,7 +56,7 @@ export const medicationLogs = pgTable("medication_logs", {
 
 export const notificationSubscriptions = pgTable("notification_subscriptions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: text("user_id").notNull(),
+  userId: varchar("user_id").notNull(),
   endpoint: text("endpoint").notNull(),
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
@@ -39,6 +66,7 @@ export const notificationSubscriptions = pgTable("notification_subscriptions", {
 
 export const medicationSurveys = pgTable("medication_surveys", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // link to patient
   medicationLogId: varchar("medication_log_id").notNull(),
   medicationName: text("medication_name").notNull(),
   hasDizziness: integer("has_dizziness").notNull(),
@@ -49,12 +77,63 @@ export const medicationSurveys = pgTable("medication_surveys", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
+// Relations
+export const usersRelations = relations(users, ({ one, many }) => ({
+  medications: many(medications),
+  medicationLogs: many(medicationLogs),
+  medicationSurveys: many(medicationSurveys),
+  notificationSubscriptions: many(notificationSubscriptions),
+  caregiver: one(users, {
+    fields: [users.caregiverId],
+    references: [users.id],
+  }),
+}));
+
+export const medicationsRelations = relations(medications, ({ one }) => ({
+  user: one(users, {
+    fields: [medications.userId],
+    references: [users.id],
+  }),
+}));
+
+export const medicationLogsRelations = relations(medicationLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [medicationLogs.userId],
+    references: [users.id],
+  }),
+  medication: one(medications, {
+    fields: [medicationLogs.medicationId],
+    references: [medications.id],
+  }),
+}));
+
+export const medicationSurveysRelations = relations(medicationSurveys, ({ one }) => ({
+  user: one(users, {
+    fields: [medicationSurveys.userId],
+    references: [users.id],
+  }),
+  medicationLog: one(medicationLogs, {
+    fields: [medicationSurveys.medicationLogId],
+    references: [medicationLogs.id],
+  }),
+}));
+
+export const notificationSubscriptionsRelations = relations(notificationSubscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [notificationSubscriptions.userId],
+    references: [users.id],
+  }),
+}));
+
+// Insert schemas
 export const insertMedicationSchema = createInsertSchema(medications).omit({
   id: true,
+  userId: true, // will be added automatically from auth
 });
 
 export const insertMedicationLogSchema = createInsertSchema(medicationLogs).omit({
   id: true,
+  userId: true, // will be added automatically from auth
   createdAt: true,
 }).extend({
   takenTime: z.string().datetime().or(z.date()).transform((val) => 
@@ -69,6 +148,7 @@ export const insertNotificationSubscriptionSchema = createInsertSchema(notificat
 
 export const insertMedicationSurveySchema = createInsertSchema(medicationSurveys).omit({
   id: true,
+  userId: true, // will be added automatically from auth
   createdAt: true,
 }).extend({
   hasDizziness: z.number().min(0).max(1),
@@ -77,6 +157,14 @@ export const insertMedicationSurveySchema = createInsertSchema(medicationSurveys
   appetiteLevel: z.enum(['good', 'reduced', 'none']),
 });
 
+export const upsertUserSchema = createInsertSchema(users).omit({
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  role: z.enum(['patient', 'caregiver']).optional(),
+});
+
+// Types
 export type InsertMedication = z.infer<typeof insertMedicationSchema>;
 export type Medication = typeof medications.$inferSelect;
 export type InsertMedicationLog = z.infer<typeof insertMedicationLogSchema>;
@@ -85,3 +173,5 @@ export type InsertNotificationSubscription = z.infer<typeof insertNotificationSu
 export type NotificationSubscription = typeof notificationSubscriptions.$inferSelect;
 export type InsertMedicationSurvey = z.infer<typeof insertMedicationSurveySchema>;
 export type MedicationSurvey = typeof medicationSurveys.$inferSelect;
+export type UpsertUser = z.infer<typeof upsertUserSchema>;
+export type User = typeof users.$inferSelect;
