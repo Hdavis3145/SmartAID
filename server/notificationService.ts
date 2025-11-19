@@ -1,4 +1,5 @@
 import webPush from 'web-push';
+import { storage } from './storage';
 
 // VAPID keys from environment variables
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
@@ -36,6 +37,28 @@ export interface NotificationPayload {
 
 class NotificationService {
   private subscriptions: Map<string, PushSubscription> = new Map();
+
+  async loadPersistedSubscriptions(): Promise<void> {
+    try {
+      // For now, load default-user subscription
+      // In production, would load all users' subscriptions
+      const subscription = await storage.getSubscription('default-user');
+      if (subscription) {
+        const pushSubscription: PushSubscription = {
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: subscription.p256dh,
+            auth: subscription.auth,
+          },
+          expirationTime: subscription.expirationTime?.getTime() || null,
+        };
+        this.subscriptions.set(subscription.userId, pushSubscription);
+        console.log(`Loaded persisted subscription for user: ${subscription.userId}`);
+      }
+    } catch (error) {
+      console.error('Failed to load persisted subscriptions:', error);
+    }
+  }
 
   getVapidPublicKey(): string {
     return VAPID_PUBLIC_KEY || '';

@@ -275,7 +275,7 @@ export default function Home() {
             if (refillNeeded.length === 0) return null;
 
             return (
-              <Card className="border-2 border-orange-500 dark:border-orange-400 bg-orange-50 dark:bg-orange-950/40" data-testid="card-refill-alerts">
+              <Card className="!border-2 border-orange-500 dark:border-orange-400 bg-orange-50 dark:bg-orange-950/40" data-testid="card-refill-alerts">
                 <CardHeader className="gap-1 space-y-0 pb-4">
                   <CardTitle className="flex items-center gap-3 text-[28px]">
                     <AlertTriangle className="w-10 h-10 text-orange-600 dark:text-orange-400" />
