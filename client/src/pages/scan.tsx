@@ -28,11 +28,8 @@ export default function Scan() {
 
   const identifyMutation = useMutation({
     mutationFn: async (imageData: string) => {
-      const response = await apiRequest("/api/identify-pill", {
-        method: "POST",
-        body: JSON.stringify({ imageData }),
-      });
-      return response.json();
+      const res = await apiRequest("POST", "/api/identify-pill", { imageData });
+      return res.json();
     },
     onSuccess: (data: IdentifiedPill) => {
       setIdentifiedPill(data);
@@ -50,8 +47,19 @@ export default function Scan() {
 
   const logMutation = useMutation({
     mutationFn: async (pillData: IdentifiedPill) => {
+      // Fetch current medications to ensure we have the latest data
+      const medsResponse = await fetch("/api/medications", {
+        credentials: "include",
+      });
+      
+      if (!medsResponse.ok) {
+        throw new Error("Failed to fetch medications");
+      }
+      
+      const currentMedications: Medication[] = await medsResponse.json();
+      
       // Find matching medication in schedule
-      const matchingMed = medications.find(m => m.name === pillData.pillName);
+      const matchingMed = currentMedications.find(m => m.name === pillData.pillName);
       
       if (!matchingMed) {
         throw new Error("Medication not found in schedule");
@@ -81,17 +89,14 @@ export default function Scan() {
         medicationId: matchingMed.id,
         medicationName: matchingMed.name,
         scheduledTime: closestTime,
-        takenTime: new Date(),
+        takenTime: new Date().toISOString(),
         status: "taken",
         confidence: pillData.confidence,
         scannedPillType: pillData.pillType,
       };
 
-      const response = await apiRequest("/api/logs", {
-        method: "POST",
-        body: JSON.stringify(logData),
-      });
-      return response.json();
+      const res = await apiRequest("POST", "/api/logs", logData);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });

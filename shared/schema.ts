@@ -31,6 +31,10 @@ export const insertMedicationSchema = createInsertSchema(medications).omit({
 export const insertMedicationLogSchema = createInsertSchema(medicationLogs).omit({
   id: true,
   createdAt: true,
+}).extend({
+  takenTime: z.string().datetime().or(z.date()).transform((val) => 
+    typeof val === 'string' ? new Date(val) : val
+  ).optional(),
 });
 
 export type InsertMedication = z.infer<typeof insertMedicationSchema>;

@@ -1,9 +1,11 @@
 import { type Medication, type InsertMedication, type MedicationLog, type InsertMedicationLog } from "@shared/schema";
 import { randomUUID } from "crypto";
-import whiteTabletImg from "../attached_assets/generated_images/White_round_tablet_pill_531071e0.png";
-import blueCapsuleImg from "../attached_assets/generated_images/Blue_oval_capsule_90e60c59.png";
-import yellowTabletImg from "../attached_assets/generated_images/Yellow_circular_tablet_b7928714.png";
-import pinkPillImg from "../attached_assets/generated_images/Pink_round_pill_056d7a48.png";
+
+// Image paths for pills
+const whiteTabletImg = "/attached_assets/generated_images/White_round_tablet_pill_531071e0.png";
+const blueCapsuleImg = "/attached_assets/generated_images/Blue_oval_capsule_90e60c59.png";
+const yellowTabletImg = "/attached_assets/generated_images/Yellow_circular_tablet_b7928714.png";
+const pinkPillImg = "/attached_assets/generated_images/Pink_round_pill_056d7a48.png";
 
 export interface IStorage {
   // Medications

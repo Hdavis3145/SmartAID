@@ -2,14 +2,16 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertMedicationLogSchema } from "@shared/schema";
-import whiteTabletImg from "../attached_assets/generated_images/White_round_tablet_pill_531071e0.png";
-import blueCapsuleImg from "../attached_assets/generated_images/Blue_oval_capsule_90e60c59.png";
-import yellowTabletImg from "../attached_assets/generated_images/Yellow_circular_tablet_b7928714.png";
-import pinkPillImg from "../attached_assets/generated_images/Pink_round_pill_056d7a48.png";
-import redWhiteCapsuleImg from "../attached_assets/generated_images/Red_white_capsule_670d2c29.png";
-import orangeTabletImg from "../attached_assets/generated_images/Orange_oblong_tablet_2baf0769.png";
-import greenCapsuleImg from "../attached_assets/generated_images/Green_capsule_pill_c79c173a.png";
-import beigeTabletImg from "../attached_assets/generated_images/Beige_oval_tablet_e36342f1.png";
+
+// Image paths for pills
+const whiteTabletImg = "/attached_assets/generated_images/White_round_tablet_pill_531071e0.png";
+const blueCapsuleImg = "/attached_assets/generated_images/Blue_oval_capsule_90e60c59.png";
+const yellowTabletImg = "/attached_assets/generated_images/Yellow_circular_tablet_b7928714.png";
+const pinkPillImg = "/attached_assets/generated_images/Pink_round_pill_056d7a48.png";
+const redWhiteCapsuleImg = "/attached_assets/generated_images/Red_white_capsule_670d2c29.png";
+const orangeTabletImg = "/attached_assets/generated_images/Orange_oblong_tablet_2baf0769.png";
+const greenCapsuleImg = "/attached_assets/generated_images/Green_capsule_pill_c79c173a.png";
+const beigeTabletImg = "/attached_assets/generated_images/Beige_oval_tablet_e36342f1.png";
 
 // Mock pill database for identification
 const pillDatabase = [
@@ -51,10 +53,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/identify-pill - Identify a scanned pill
   app.post("/api/identify-pill", async (req, res) => {
     try {
-      // In a real app, this would process the image with AI
-      // For now, randomly select a pill from database to simulate identification
-      const randomIndex = Math.floor(Math.random() * pillDatabase.length);
-      const identifiedPill = pillDatabase[randomIndex];
+      // Get user's scheduled medications
+      const scheduledMeds = await storage.getMedications();
+      
+      // Filter pill database to only include scheduled medications
+      // Note: Matches by name only. For production, consider matching by unique IDs
+      const scheduledPills = pillDatabase.filter(pill => 
+        scheduledMeds.some(med => med.name === pill.name)
+      );
+      
+      // If no scheduled pills match, return a random one from the full database
+      const availablePills = scheduledPills.length > 0 ? scheduledPills : pillDatabase;
+      
+      // Randomly select a pill to simulate identification
+      const randomIndex = Math.floor(Math.random() * availablePills.length);
+      const identifiedPill = availablePills[randomIndex];
       const confidence = Math.floor(Math.random() * 20) + 80; // 80-100%
 
       res.json({
@@ -76,6 +89,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const log = await storage.createMedicationLog(validatedData);
       res.json(log);
     } catch (error) {
+      console.error("Log creation error:", error);
       res.status(400).json({ error: "Invalid log data" });
     }
   });
@@ -112,19 +126,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentMinute = today.getMinutes();
       const currentTimeInMinutes = currentHour * 60 + currentMinute;
 
-      let totalScheduledToday = 0;
+      // Count total unique doses scheduled for today
+      // Use medication-time pairs to avoid double-counting
+      const scheduledDoses = new Set<string>();
+      const dosesSoFar = new Set<string>();
+      
       medications.forEach(med => {
         med.times.forEach(time => {
+          const doseKey = `${med.id}-${time}`;
+          scheduledDoses.add(doseKey);
+          
           const [hour, minute] = time.split(':').map(Number);
           const scheduleTimeInMinutes = hour * 60 + minute;
           if (scheduleTimeInMinutes <= currentTimeInMinutes) {
-            totalScheduledToday++;
+            dosesSoFar.add(doseKey);
           }
         });
       });
 
+      const totalScheduledToday = scheduledDoses.size;
+      const scheduledSoFar = dosesSoFar.size;
+      
       const takenCount = todayLogs.filter(log => log.status === "taken").length;
       const missedCount = todayLogs.filter(log => log.status === "missed").length;
+      
+      // Pending count is doses that should have been taken by now but haven't been
+      const pendingCount = Math.max(0, scheduledSoFar - takenCount - missedCount);
       
       // Calculate 7-day adherence
       const allLogs = await storage.getMedicationLogs();
@@ -141,7 +168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalScheduledToday,
         takenCount,
         missedCount,
-        pendingCount: totalScheduledToday - takenCount - missedCount,
+        pendingCount,
         adherenceRate,
       });
     } catch (error) {
