@@ -7,6 +7,7 @@ import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Medication } from "@shared/schema";
+import { insertMedicationSchema, insertMedicationLogSchema } from "@shared/schema";
 
 interface IdentifiedPill {
   pillName: string;
@@ -45,6 +46,101 @@ export default function Scan() {
         variant: "destructive",
       });
       setIsScanning(true);
+    },
+  });
+
+  const addMedicationAndLogMutation = useMutation({
+    mutationFn: async (pillData: IdentifiedPill) => {
+      let createdMedicationId: string | null = null;
+      
+      try {
+        // Step 1: Add this medication to the schedule with validated default values
+        const now = new Date();
+        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        
+        // Validate medication data with schema
+        const validatedMedData = insertMedicationSchema.parse({
+          name: pillData.pillName,
+          dosage: "As prescribed",
+          pillType: pillData.pillType,
+          imageUrl: pillData.pillImage,
+          times: [currentTime], // Schedule for current time
+          pillsRemaining: 30, // Default to 30 pills
+          refillThreshold: 7,
+        });
+
+        const createRes = await apiRequest("POST", "/api/medications", validatedMedData);
+        if (!createRes.ok) {
+          const errorText = await createRes.text();
+          throw new Error(`Failed to create medication: ${errorText}`);
+        }
+        const createdMedication = await createRes.json();
+        createdMedicationId = createdMedication.id;
+        
+        // Step 2: Wait for creation to complete, then immediately log the dose
+        // Validate log data with schema
+        const validatedLogData = insertMedicationLogSchema.parse({
+          medicationId: createdMedication.id,
+          medicationName: createdMedication.name,
+          scheduledTime: currentTime,
+          takenTime: new Date().toISOString(),
+          status: "taken",
+          confidence: pillData.confidence,
+          scannedPillType: pillData.pillType,
+        });
+
+        const logRes = await apiRequest("POST", "/api/logs", validatedLogData);
+        if (!logRes.ok) {
+          const errorText = await logRes.text();
+          throw new Error(`Failed to log medication dose: ${errorText}`);
+        }
+        const logResult = await logRes.json();
+        
+        return {
+          medication: createdMedication,
+          log: logResult,
+        };
+      } catch (error) {
+        // Rollback: Delete the medication if log failed
+        if (createdMedicationId) {
+          try {
+            await apiRequest("DELETE", `/api/medications/${createdMedicationId}`);
+            console.log('Rolled back medication creation due to log failure');
+          } catch (rollbackError) {
+            console.error('Failed to rollback medication creation:', rollbackError);
+          }
+        }
+        throw error;
+      }
+    },
+    onSuccess: (data) => {
+      // Invalidate all relevant caches
+      queryClient.invalidateQueries({ queryKey: ["/api/medications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/logs/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      
+      toast({
+        title: "Success",
+        description: `${data.medication.name} added to schedule and dose logged`,
+      });
+      
+      // Show survey dialog
+      setLoggedMedication({
+        logId: data.log.id,
+        name: data.medication.name,
+      });
+      setShowSurvey(true);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add medication and log dose",
+        variant: "destructive",
+      });
+      // Reset state on error so user can retry
+      setIsScanning(true);
+      setIdentifiedPill(null);
     },
   });
 
@@ -137,6 +233,12 @@ export default function Scan() {
     }
   };
 
+  const handleAddToSchedule = () => {
+    if (identifiedPill) {
+      addMedicationAndLogMutation.mutate(identifiedPill);
+    }
+  };
+
   const handleRetry = () => {
     setIdentifiedPill(null);
     setIsScanning(true);
@@ -170,6 +272,7 @@ export default function Scan() {
             confidence={identifiedPill.confidence}
             expectedPill={matchingMed?.name}
             onConfirm={matchingMed ? handleConfirm : undefined}
+            onAddToSchedule={!matchingMed ? handleAddToSchedule : undefined}
             onRetry={handleRetry}
           />
         </div>

@@ -24,6 +24,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
   upsertUser(user: UpsertUser): Promise<User>;
   createUser(email: string, passwordHash: string, firstName: string, lastName: string, role: string): Promise<User>;
   
@@ -67,12 +68,16 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
+  }
+
   async createUser(email: string, passwordHash: string, firstName: string, lastName: string, role: string): Promise<User> {
+    // Note: passwordHash is kept in signature for compatibility but not used (no auth in single-user app)
     const [user] = await db
       .insert(users)
       .values({
         email,
-        passwordHash,
         firstName,
         lastName,
         role,

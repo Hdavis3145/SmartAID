@@ -9,6 +9,7 @@ interface PillIdentificationProps {
   confidence: number;
   expectedPill?: string;
   onConfirm?: () => void;
+  onAddToSchedule?: () => void;
   onRetry?: () => void;
 }
 
@@ -18,9 +19,11 @@ export default function PillIdentification({
   confidence,
   expectedPill,
   onConfirm,
+  onAddToSchedule,
   onRetry,
 }: PillIdentificationProps) {
   const isMatch = expectedPill ? pillName === expectedPill : true;
+  const isUnscheduled = !expectedPill && onAddToSchedule;
   const confidenceColor = confidence >= 80 ? "bg-green-600" : confidence >= 60 ? "bg-yellow-600" : "bg-red-600";
 
   return (
@@ -68,6 +71,22 @@ export default function PillIdentification({
             </div>
           </div>
         )}
+
+        {isUnscheduled && (
+          <div className="bg-blue-50 dark:bg-blue-900/20 border-2 border-primary rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-8 h-8 text-primary flex-shrink-0 mt-1" />
+              <div className="text-left">
+                <p className="text-[20px] font-semibold text-blue-900 dark:text-blue-100">
+                  Not in Your Schedule
+                </p>
+                <p className="text-[18px] text-blue-800 dark:text-blue-200 mt-1">
+                  This medication is not currently scheduled. Would you like to add it?
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -78,6 +97,16 @@ export default function PillIdentification({
             data-testid="button-confirm"
           >
             Confirm & Log Dose
+          </Button>
+        )}
+
+        {isUnscheduled && onAddToSchedule && (
+          <Button
+            onClick={onAddToSchedule}
+            className="w-full min-h-[56px] text-[22px]"
+            data-testid="button-add-to-schedule"
+          >
+            Add to Schedule & Log Dose
           </Button>
         )}
         

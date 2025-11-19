@@ -56,6 +56,9 @@ app.use((req, res, next) => {
 
   // Start automatic refill reminder scheduler (runs once per process, every 24 hours)
   notificationService.startRefillReminderScheduler(24);
+  
+  // Start medication time reminder scheduler (checks every minute, sends 15 min before time)
+  notificationService.startMedicationReminderScheduler();
 
   const server = await registerRoutes(app);
 

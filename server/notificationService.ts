@@ -38,6 +38,8 @@ export interface NotificationPayload {
 class NotificationService {
   private subscriptions: Map<string, PushSubscription> = new Map();
   private schedulerInterval: NodeJS.Timeout | null = null;
+  private medicationReminderInterval: NodeJS.Timeout | null = null;
+  private sentRemindersToday: Set<string> = new Set(); // Track sent reminders by "${userId}-${medId}-${time}"
 
   async loadPersistedSubscriptions(): Promise<void> {
     try {
@@ -110,6 +112,102 @@ class NotificationService {
       clearInterval(this.schedulerInterval);
       this.schedulerInterval = null;
       console.log('Refill reminder scheduler stopped');
+    }
+  }
+
+  async checkAndSendMedicationReminders(): Promise<void> {
+    try {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Reset sent reminders if we've entered a new day (date-based, not time-based)
+      const lastResetDate = (this as any).lastResetDate;
+      if (lastResetDate !== currentDate) {
+        this.sentRemindersToday.clear();
+        (this as any).lastResetDate = currentDate;
+        console.log(`🔄 Reset sent reminders for new day: ${currentDate}`);
+      }
+
+      // Get ALL users from storage, not just those with active subscriptions
+      const allUsers = await storage.getAllUsers();
+      
+      for (const user of allUsers) {
+        try {
+          const medications = await storage.getMedications(user.id);
+
+          for (const med of medications) {
+            for (const scheduledTime of med.times) {
+              // Parse scheduled time (format: "HH:MM")
+              const [schedHour, schedMin] = scheduledTime.split(':').map(Number);
+              
+              // Send reminder 15 minutes before scheduled time
+              const reminderHour = schedHour;
+              const reminderMin = schedMin - 15;
+              
+              // Adjust for negative minutes (e.g., 00:10 → 23:55 previous hour)
+              let adjustedHour = reminderHour;
+              let adjustedMin = reminderMin;
+              
+              if (adjustedMin < 0) {
+                adjustedMin += 60;
+                adjustedHour -= 1;
+                if (adjustedHour < 0) adjustedHour += 24;
+              }
+
+              // Check if it's time to send reminder
+              if (currentHour === adjustedHour && currentMinute === adjustedMin) {
+                // Use date-based key to allow re-sending if schedule changes
+                const reminderKey = `${currentDate}-${user.id}-${med.id}-${scheduledTime}`;
+                
+                // Only send once per day per medication time
+                if (!this.sentRemindersToday.has(reminderKey)) {
+                  // Check if user has an active push subscription
+                  const hasSubscription = this.subscriptions.has(user.id);
+                  
+                  if (hasSubscription) {
+                    console.log(`⏰ Sending medication reminder for ${med.name} at ${scheduledTime}`);
+                    await this.sendMedicationReminder(user.id, med.name, scheduledTime);
+                    this.sentRemindersToday.add(reminderKey);
+                  } else {
+                    console.log(`⚠️  Skipping reminder for ${med.name} at ${scheduledTime} - no push subscription for user ${user.id}`);
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to check medication reminders for user ${user.id}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check and send medication reminders:', error);
+    }
+  }
+
+  startMedicationReminderScheduler(): void {
+    // Clear existing interval if any
+    if (this.medicationReminderInterval) {
+      clearInterval(this.medicationReminderInterval);
+    }
+
+    // Run immediately on start
+    this.checkAndSendMedicationReminders();
+
+    // Check every minute for upcoming medication times
+    this.medicationReminderInterval = setInterval(() => {
+      this.checkAndSendMedicationReminders();
+    }, 60 * 1000); // 1 minute
+
+    console.log('⏰ Medication reminder scheduler started (checking every minute)');
+  }
+
+  stopMedicationReminderScheduler(): void {
+    if (this.medicationReminderInterval) {
+      clearInterval(this.medicationReminderInterval);
+      this.medicationReminderInterval = null;
+      console.log('Medication reminder scheduler stopped');
     }
   }
 
