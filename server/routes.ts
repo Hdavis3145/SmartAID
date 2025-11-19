@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertMedicationSchema, updateMedicationSchema, insertMedicationLogSchema, insertMedicationSurveySchema } from "@shared/schema";
+import { insertMedicationSchema, updateMedicationSchema, insertMedicationLogSchema, insertMedicationSurveySchema, insertCaregiverSchema, updateCaregiverSchema } from "@shared/schema";
 import { notificationService, type PushSubscription } from "./notificationService";
 
 // Default user for single-user household deployment (no authentication)
@@ -175,6 +175,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to delete medication:", error);
       res.status(500).json({ error: "Failed to delete medication" });
+    }
+  });
+
+  // GET /api/caregivers - Get all caregivers
+  app.get("/api/caregivers", async (req, res) => {
+    try {
+      const userId = DEFAULT_USER_ID;
+      const caregivers = await storage.getCaregivers(userId);
+      res.json(caregivers);
+    } catch (error) {
+      console.error("Failed to fetch caregivers:", error);
+      res.status(500).json({ error: "Failed to fetch caregivers" });
+    }
+  });
+
+  // GET /api/caregivers/:id - Get specific caregiver
+  app.get("/api/caregivers/:id", async (req, res) => {
+    try {
+      const userId = DEFAULT_USER_ID;
+      const caregiver = await storage.getCaregiver(req.params.id, userId);
+      if (!caregiver) {
+        return res.status(404).json({ error: "Caregiver not found" });
+      }
+      res.json(caregiver);
+    } catch (error) {
+      console.error("Failed to fetch caregiver:", error);
+      res.status(500).json({ error: "Failed to fetch caregiver" });
+    }
+  });
+
+  // POST /api/caregivers - Add a new caregiver
+  app.post("/api/caregivers", async (req, res) => {
+    try {
+      const userId = DEFAULT_USER_ID;
+      const validatedData = insertCaregiverSchema.parse(req.body);
+      const caregiver = await storage.createCaregiver(validatedData, userId);
+      res.status(201).json(caregiver);
+    } catch (error) {
+      console.error("Failed to create caregiver:", error);
+      res.status(400).json({ error: "Failed to create caregiver" });
+    }
+  });
+
+  // PATCH /api/caregivers/:id - Update a caregiver
+  app.patch("/api/caregivers/:id", async (req, res) => {
+    try {
+      const userId = DEFAULT_USER_ID;
+      const validatedData = updateCaregiverSchema.parse(req.body);
+      const caregiver = await storage.updateCaregiver(req.params.id, validatedData, userId);
+      if (!caregiver) {
+        return res.status(404).json({ error: "Caregiver not found" });
+      }
+      res.json(caregiver);
+    } catch (error) {
+      console.error("Failed to update caregiver:", error);
+      res.status(400).json({ error: "Failed to update caregiver" });
+    }
+  });
+
+  // DELETE /api/caregivers/:id - Delete a caregiver
+  app.delete("/api/caregivers/:id", async (req, res) => {
+    try {
+      const userId = DEFAULT_USER_ID;
+      const deleted = await storage.deleteCaregiver(req.params.id, userId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Caregiver not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete caregiver:", error);
+      res.status(500).json({ error: "Failed to delete caregiver" });
     }
   });
 
